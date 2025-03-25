@@ -687,13 +687,23 @@ async function setTimestampComment(filePath) {
   }
 }
 
-async function processDirectory(dir, force = false, commentOnly = false) {
+async function processDirectory(
+  dir,
+  force = false,
+  commentOnly = false,
+  mp4 = false
+) {
   console.log(`📂 Scanning directory: ${dir}`);
+
+  // Determine which file extensions to look for based on the mp4 flag
+  const fileExtension = mp4 ? ".mp4" : ".mov";
+  console.log(`🔍 Looking for *${fileExtension} files`);
+
   const files = (await fs.readdir(dir))
-    .filter((f) => f.toLowerCase().endsWith(".mov"))
+    .filter((f) => f.toLowerCase().endsWith(fileExtension))
     .map((f) => path.join(dir, f));
 
-  console.log(`📊 Found ${files.length} MOV files`);
+  console.log(`📊 Found ${files.length}${mp4 ? " MP4" : " MOV"} files`);
 
   if (commentOnly) {
     for (let i = 0; i < files.length; i++) {
@@ -714,15 +724,16 @@ const args = process.argv.slice(2);
 const dirPath = args[0];
 const force = args.includes("--force");
 const commentOnly = args.includes("--comment-only");
+const mp4 = args.includes("--mp4");
 
 if (!dirPath) {
   console.log(
-    "Usage: node convert.cjs path/to/video/folder [--force] [--comment-only]"
+    "Usage: node convert.cjs path/to/video/folder [--force] [--comment-only] [--mp4]"
   );
   process.exit(1);
 }
 
-processDirectory(dirPath, force, commentOnly).catch((error) => {
+processDirectory(dirPath, force, commentOnly, mp4).catch((error) => {
   console.error("\n❌ Fatal error:", error);
   process.exit(1);
 });
