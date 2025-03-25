@@ -3,10 +3,7 @@ const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
 const OpenAI = require("openai");
 const dotenv = require("dotenv");
-let fetch;
-import("node-fetch").then((module) => {
-  fetch = module.default;
-});
+const fetch = require("node-fetch");
 const { execSync } = require("child_process");
 const bplistCreator = require("bplist-creator");
 const { createCanvas } = require("canvas");
@@ -291,7 +288,13 @@ function drawSummaryOnCanvas(text) {
   return canvas.toBuffer("image/png");
 }
 
-async function writeSummaryFile(summary, originalPath, newPath) {
+async function writeSummaryFile(summary, newPath, targetDir) {
+  const summaryTxtPath = path.join(targetDir, "summaries_and_transcripts.txt");
+  const summaryJsonPath = path.join(
+    targetDir,
+    "summaries_and_transcripts.json"
+  );
+
   // Write text format
   const textContent = `File: ${newPath}
 Duration: ${summary.duration_seconds.toFixed(1)} seconds
@@ -308,16 +311,13 @@ ${
     summary.transcript ? `Transcript:\n${summary.transcript}\n\n` : ""
   }${"-".repeat(80)}\n\n`;
 
-  await fs.appendFile("summaries_and_transcripts.txt", textContent);
+  await fs.appendFile(summaryTxtPath, textContent);
 
   // Write JSON format
   let jsonContent = [];
   try {
-    if (await fs.pathExists("summaries_and_transcripts.json")) {
-      const content = await fs.readFile(
-        "summaries_and_transcripts.json",
-        "utf8"
-      );
+    if (await fs.pathExists(summaryJsonPath)) {
+      const content = await fs.readFile(summaryJsonPath, "utf8");
       if (content.trim()) {
         jsonContent = JSON.parse(
           content.endsWith(",\n") ? `[${content.slice(0, -2)}]` : content
@@ -335,10 +335,7 @@ ${
   };
 
   jsonContent.push(summaryWithPath);
-  await fs.writeFile(
-    "summaries_and_transcripts.json",
-    JSON.stringify(jsonContent, null, 2)
-  );
+  await fs.writeFile(summaryJsonPath, JSON.stringify(jsonContent, null, 2));
 }
 
 function hasMetadata(filePath) {
@@ -419,8 +416,6 @@ async function analyzeInitialFrame(videoPath) {
     ],
     max_tokens: 500,
   });
-
-  await fs.remove(frameDir);
 
   try {
     // Try to parse the response
@@ -559,7 +554,7 @@ Respond ONLY with the JSON object, no other text.`;
   }
 }
 
-async function processVideo(videoPath, force = false) {
+async function processVideo(videoPath, force = false, targetDir) {
   console.log("\n🎬 ===========================================");
   console.log(`🎬 Processing video: ${path.basename(videoPath)}`);
   console.log("===========================================\n");
@@ -630,11 +625,7 @@ async function processVideo(videoPath, force = false) {
     };
 
     // Write summaries with full paths
-    await writeSummaryFile(
-      summary,
-      path.resolve(videoPath),
-      path.resolve(newPath)
-    );
+    await writeSummaryFile(summary, path.resolve(newPath), targetDir);
 
     // Rename file and set metadata
     console.log(`📝 Renaming to: ${newFileName}`);
@@ -696,7 +687,7 @@ async function processDirectory(dir, force = false, commentOnly = false) {
   files.sort((a, b) => fs.statSync(a).size - fs.statSync(b).size);
   for (let i = 0; i < files.length; i++) {
     console.log(`\n🎬 Processing file ${i + 1}/${files.length}`);
-    await processVideo(files[i], force);
+    await processVideo(files[i], force, dir);
   }
 }
 
