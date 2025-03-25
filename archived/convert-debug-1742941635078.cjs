@@ -1,4 +1,15 @@
 const fs = require("fs-extra");
+
+// Debug logging functions
+function logDebug(message) {
+  const timestamp = new Date().toISOString();
+  console.log(`[DEBUG ${timestamp}] ${message}`);
+}
+
+// Start overall timer
+const startTime = Date.now();
+logDebug("Script started");
+
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
 const OpenAI = require("openai");
@@ -7,47 +18,8 @@ const fetch = require("node-fetch");
 const { execSync } = require("child_process");
 const bplistCreator = require("bplist-creator");
 const { createCanvas } = require("canvas");
-const ffmpegStatic = require("ffmpeg-static");
 
 dotenv.config();
-
-// Configure ffmpeg path
-function configureFfmpeg() {
-  try {
-    // Try to use ffmpeg-static first
-    if (ffmpegStatic) {
-      console.log(`🔧 Setting FFmpeg path to (from ffmpeg-static): ${ffmpegStatic}`);
-      ffmpeg.setFfmpegPath(ffmpegStatic);
-      
-      // For ffprobe, still use system path
-      const ffprobePath = execSync("which ffprobe").toString().trim();
-      console.log(`🔧 Setting FFprobe path to: ${ffprobePath}`);
-      ffmpeg.setFfprobePath(ffprobePath);
-    } else {
-      // Fallback to system paths
-      const ffmpegPath = execSync("which ffmpeg").toString().trim();
-      const ffprobePath = execSync("which ffprobe").toString().trim();
-
-      console.log(`🔧 Setting FFmpeg path to (from system): ${ffmpegPath}`);
-      console.log(`🔧 Setting FFprobe path to: ${ffprobePath}`);
-
-      ffmpeg.setFfmpegPath(ffmpegPath);
-      ffmpeg.setFfprobePath(ffprobePath);
-    }
-
-    return true;
-  } catch (error) {
-    console.error("❌ Error configuring FFmpeg paths:", error.message);
-    console.error("💡 Make sure FFmpeg is installed: brew install ffmpeg");
-    return false;
-  }
-}
-
-// Configure FFmpeg at startup
-if (!configureFfmpeg()) {
-  console.error("❌ Failed to configure FFmpeg. Exiting.");
-  process.exit(1);
-}
 
 const startTimes = new Map();
 function startTimer(label) {
@@ -69,6 +41,7 @@ function generateShortGuid() {
 }
 
 async function generateShortName(description, importance) {
+  logDebug("Making OpenAI API request");
   const response = await openai.chat.completions.create({
     model: "gpt-4-turbo-preview",
     messages: [
@@ -112,16 +85,32 @@ Respond with ONLY the short name, no other text.`,
 }
 
 async function transcribeAudio(videoPath) {
+  logDebug(`Starting transcription of: ${path.basename(videoPath)}`);
+  logDebug(`Full path: ${videoPath}`);
+  // Check if file exists and is readable
+  try {
+    await fs.access(videoPath, fs.constants.R_OK);
+    logDebug("Video file is readable");
+    
+    const stats = await fs.stat(videoPath);
+    logDebug(`File size: ${(stats.size / (1024 * 1024)).toFixed(2)} MB`);
+  } catch (error) {
+    logDebug(`ERROR: Can't access video file: ${error.message}`);
+    throw error;
+  }
+
   console.log("🎯 Starting audio transcription...");
   startTimer("transcription");
   const audioPath = "temp_audio.mp3";
 
+  logDebug("Beginning audio extraction with FFmpeg");
   await new Promise((resolve, reject) => {
     ffmpeg(videoPath)
       .format("mp3")
       .save(audioPath)
       .on("end", () => {
         console.log("✅ Audio extraction complete");
+        logDebug("Audio extraction finished successfully");
         resolve();
       })
       .on("error", (err) => {
@@ -131,6 +120,14 @@ async function transcribeAudio(videoPath) {
   });
 
   console.log("🤖 Sending audio to Whisper...");
+  logDebug("Checking extracted audio file");
+  try {
+    const audioStats = await fs.stat(audioPath);
+    logDebug(`Audio file size: ${(audioStats.size / (1024 * 1024)).toFixed(2)} MB`);
+  } catch (error) {
+    logDebug(`ERROR checking audio file: ${error.message}`);
+  }
+  logDebug("Preparing to send audio to OpenAI API");
   const transcription = await openai.audio.transcriptions.create({
     file: fs.createReadStream(audioPath),
     model: "whisper-1",
@@ -145,6 +142,7 @@ async function transcribeAudio(videoPath) {
 }
 
 async function extractKeyframes(videoPath, numFrames) {
+  logDebug(`Starting keyframe extraction for: ${path.basename(videoPath)}`);
   console.log(`🎯 Starting keyframe extraction (${numFrames} frames)...`);
   startTimer("keyframes");
   const frameDir = "frames";
