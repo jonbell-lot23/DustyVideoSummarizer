@@ -401,9 +401,23 @@ async function analyzeInitialFrame(videoPath) {
               '  "needsTranscript": true/false,\n' +
               '  "additionalKeyframes": number between 0-4\n' +
               "}\n\n" +
+              "CRITICAL TRANSCRIPT RULES:\n" +
+              "1. ALWAYS set needsTranscript=true if:\n" +
+              "   - Video is longer than 5 seconds\n" +
+              "   - There are any people visible\n" +
+              "   - There are any children visible\n" +
+              "   - There appears to be any conversation or interaction\n" +
+              "   - There is any text or signage visible\n" +
+              "   - There is any audio that might contain speech\n" +
+              "2. Only set needsTranscript=false if:\n" +
+              "   - Video is very short (under 5 seconds)\n" +
+              "   - Contains only scenery or objects\n" +
+              "   - No people or text visible\n" +
+              "   - No apparent conversation or interaction\n" +
+              "\n" +
               "Guidelines:\n" +
               "- description: Keep it simple and factual\n" +
-              "- needsTranscript: Set true if there appears to be conversation or important audio\n" +
+              "- needsTranscript: Follow the rules above strictly\n" +
               "- additionalKeyframes: Request more if scene is dynamic or multiple angles would help\n" +
               "\nRespond ONLY with the JSON object, no other text.",
           },
@@ -427,6 +441,11 @@ async function analyzeInitialFrame(videoPath) {
 
     console.log("Raw response:", responseText); // Debug log
     const analysis = JSON.parse(responseText);
+
+    // Force transcript if duration > 5 seconds
+    if (duration > 5) {
+      analysis.needsTranscript = true;
+    }
 
     // Validate the required fields
     if (
