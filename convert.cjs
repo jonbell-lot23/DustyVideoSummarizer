@@ -291,10 +291,9 @@ function drawSummaryOnCanvas(text) {
   return canvas.toBuffer("image/png");
 }
 
-async function writeSummaryFile(summary) {
+async function writeSummaryFile(summary, originalPath, newPath) {
   // Write text format
-  const textContent = `File: ${summary.filename}
-Original name: ${summary.original_name}
+  const textContent = `File: ${newPath}
 Duration: ${summary.duration_seconds.toFixed(1)} seconds
 Importance: ${summary.importance.rating}/9 - ${summary.importance.reason}
 
@@ -329,7 +328,13 @@ ${
     console.warn("Warning: Could not read existing JSON file, starting fresh");
   }
 
-  jsonContent.push(summary);
+  // Add full path to the summary object
+  const summaryWithPath = {
+    ...summary,
+    path: newPath,
+  };
+
+  jsonContent.push(summaryWithPath);
   await fs.writeFile(
     "summaries_and_transcripts.json",
     JSON.stringify(jsonContent, null, 2)
@@ -624,8 +629,12 @@ async function processVideo(videoPath, force = false) {
       processed_at: new Date().toISOString(),
     };
 
-    // Write summaries
-    await writeSummaryFile(summary);
+    // Write summaries with full paths
+    await writeSummaryFile(
+      summary,
+      path.resolve(videoPath),
+      path.resolve(newPath)
+    );
 
     // Rename file and set metadata
     console.log(`📝 Renaming to: ${newFileName}`);
